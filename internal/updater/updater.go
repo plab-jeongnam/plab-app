@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	repoOwner = "plab"
+	repoOwner = "plab-jeongnam"
 	repoName  = "plab-app"
 	timeout   = 2 * time.Second
 )
@@ -44,7 +44,7 @@ func CheckAndUpdate(currentVersion string) {
 	latestVersion := strings.TrimPrefix(latest.TagName, "v")
 	current := strings.TrimPrefix(currentVersion, "v")
 
-	if latestVersion <= current {
+	if !isNewer(latestVersion, current) {
 		return
 	}
 
@@ -78,6 +78,24 @@ func CheckAndUpdate(currentVersion string) {
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
 	fmt.Println(successStyle.Render(fmt.Sprintf("  %s으로 업데이트 완료!", latest.TagName)))
 	fmt.Println()
+}
+
+func isNewer(latest, current string) bool {
+	lp := strings.Split(latest, ".")
+	cp := strings.Split(current, ".")
+
+	for i := 0; i < len(lp) && i < len(cp); i++ {
+		l, r := 0, 0
+		fmt.Sscanf(lp[i], "%d", &l)
+		fmt.Sscanf(cp[i], "%d", &r)
+		if l > r {
+			return true
+		}
+		if l < r {
+			return false
+		}
+	}
+	return false
 }
 
 func fetchLatestRelease() (*githubRelease, error) {
