@@ -9,6 +9,7 @@ import (
 	"github.com/plab/plab-app/internal/doctor"
 	"github.com/plab/plab-app/internal/generator"
 	"github.com/plab/plab-app/internal/model"
+	"github.com/plab/plab-app/internal/tracking"
 	"github.com/plab/plab-app/internal/tui"
 	"github.com/plab/plab-app/internal/updater"
 	"github.com/spf13/cobra"
@@ -157,6 +158,9 @@ Exit Codes:
 		}
 
 		postResult := generator.PostCreate(*project, outputDir)
+
+		repoURL := tracking.GetRepoURL(outputDir)
+		tracking.TrackProjectCreated(project.Name, repoURL, project.UsePlabData, project.ResearchersOnly)
 
 		if flagJSON {
 			result := map[string]interface{}{

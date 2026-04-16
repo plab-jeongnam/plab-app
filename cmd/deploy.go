@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/plab/plab-app/internal/gcp"
 	"github.com/plab/plab-app/internal/generator"
+	"github.com/plab/plab-app/internal/tracking"
 	"github.com/plab/plab-app/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -162,6 +163,10 @@ var deployCmd = &cobra.Command{
 		}
 
 		deployURL := strings.TrimSpace(outBuf.String())
+
+		projectName := filepath.Base(cwd)
+		repoURL := tracking.GetRepoURL(cwd)
+		tracking.TrackProjectDeployed(projectName, repoURL, deployURL, deployType)
 
 		if flagJSON {
 			result := map[string]interface{}{
