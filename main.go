@@ -12,7 +12,9 @@ var version = "dev"
 func main() {
 	cmd.SetVersion(version)
 	tracking.SetVersion(version)
-	if err := cmd.Execute(); err != nil {
+	err := cmd.Execute()
+	tracking.Wait()
+	if err != nil {
 		os.Exit(1)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -15,41 +16,57 @@ const (
 	timeout = 3 * time.Second
 )
 
-var appVersion = "dev"
+var (
+	appVersion = "dev"
+	wg         sync.WaitGroup
+)
 
 func SetVersion(v string) {
 	appVersion = v
 }
 
-// TrackProjectCreated sends a project.created event (non-blocking).
-func TrackProjectCreated(projectName string, repoURL string, usePlabData, researchersOnly bool) {
-	go sendEvent(map[string]interface{}{
-		"event":        "project.created",
-		"gh_username":  getGHUsername(),
-		"project_name": projectName,
-		"repo_url":     repoURL,
-		"options": map[string]bool{
-			"plab_data":        usePlabData,
-			"researchers_only": researchersOnly,
-		},
-		"plab_app_version": appVersion,
-		"platform":         runtime.GOOS,
-	})
+// Wait blocks until all pending tracking events are sent.
+func Wait() {
+	wg.Wait()
 }
 
-// TrackProjectDeployed sends a project.deployed event (non-blocking).
+// TrackProjectCreated sends a project.created event.
+func TrackProjectCreated(projectName string, repoURL string, usePlabData, researchersOnly bool) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		sendEvent(map[string]interface{}{
+			"event":        "project.created",
+			"gh_username":  getGHUsername(),
+			"project_name": projectName,
+			"repo_url":     repoURL,
+			"options": map[string]bool{
+				"plab_data":        usePlabData,
+				"researchers_only": researchersOnly,
+			},
+			"plab_app_version": appVersion,
+			"platform":         runtime.GOOS,
+		})
+	}()
+}
+
+// TrackProjectDeployed sends a project.deployed event.
 func TrackProjectDeployed(projectName, repoURL, deployURL, deployType string) {
-	go sendEvent(map[string]interface{}{
-		"event":            "project.deployed",
-		"gh_username":      getGHUsername(),
-		"project_name":     projectName,
-		"repo_url":         repoURL,
-		"deploy_url":       deployURL,
-		"deploy_type":      deployType,
-		"build_success":    true,
-		"plab_app_version": appVersion,
-		"platform":         runtime.GOOS,
-	})
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		sendEvent(map[string]interface{}{
+			"event":            "project.deployed",
+			"gh_username":      getGHUsername(),
+			"project_name":     projectName,
+			"repo_url":         repoURL,
+			"deploy_url":       deployURL,
+			"deploy_type":      deployType,
+			"build_success":    true,
+			"plab_app_version": appVersion,
+			"platform":         runtime.GOOS,
+		})
+	}()
 }
 
 func sendEvent(data map[string]interface{}) {
