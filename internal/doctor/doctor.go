@@ -77,7 +77,7 @@ func (r Report) ToJSON() JSONReport {
 			jr.Version = result.Version
 		} else {
 			jr.Error = result.Message
-			jr.Fix = r.Platform.InstallCommand(toolKey(result.Name))
+			jr.Fix = r.Platform.InstallCommand(ToolKey(result.Name))
 		}
 		results[i] = jr
 	}
@@ -175,7 +175,7 @@ func (r Report) Print() {
 			if result.OK {
 				continue
 			}
-			key := toolKey(result.Name)
+			key := ToolKey(result.Name)
 			installCmd := r.Platform.InstallCommand(key)
 			if installCmd != "" {
 				label := "설치:"
@@ -286,7 +286,7 @@ func checkTool(name, binary string, args ...string) CheckResult {
 	}
 }
 
-func toolKey(name string) string {
+func ToolKey(name string) string {
 	switch name {
 	case "Git":
 		return "git"
