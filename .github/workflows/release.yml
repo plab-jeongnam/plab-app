@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build all platforms
+        env:
+          PLAB_GCP_PROJECT_NUMBER: ${{ secrets.PLAB_GCP_PROJECT_NUMBER }}
+          PLAB_OAUTH_CLIENT_ID: ${{ secrets.PLAB_OAUTH_CLIENT_ID }}
+          PLAB_OAUTH_CLIENT_SECRET: ${{ secrets.PLAB_OAUTH_CLIENT_SECRET }}
+        run: make build-all VERSION=${{ github.ref_name }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/plab-app-darwin-arm64
+            dist/plab-app-darwin-amd64
+            dist/plab-app-windows-amd64.exe
+            dist/plab-app-windows-arm64.exe
+          generate_release_notes: true
+          body: |
+            ## 설치 방법
+
+            ### macOS (Apple Silicon)
+            ```bash
+            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/plab-app-darwin-arm64 -o /usr/local/bin/plab-app
+            chmod +x /usr/local/bin/plab-app
+            ```
+
+            ### macOS (Intel)
+            ```bash
+            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/plab-app-darwin-amd64 -o /usr/local/bin/plab-app
+            chmod +x /usr/local/bin/plab-app
+            ```
+
+            ### Windows (PowerShell)
+            ```powershell
+            Invoke-WebRequest -Uri https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/plab-app-windows-amd64.exe -OutFile plab-app.exe
+            Move-Item plab-app.exe "$env:LOCALAPPDATA\Microsoft\WindowsApps\plab-app.exe"
+            ```
