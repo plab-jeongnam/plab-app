@@ -3,9 +3,12 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/charmbracelet/huh"
 	"github.com/plab/plab-app/internal/doctor"
 	"github.com/plab/plab-app/internal/generator"
 	"github.com/plab/plab-app/internal/model"
@@ -62,6 +65,7 @@ Exit Codes:
   1  디렉토리 이미 존재
   1  빌드 실패`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		startTime := time.Now()
 		updater.CheckAndUpdate(appVersion)
 
 		report := doctor.Run()
@@ -181,7 +185,34 @@ Exit Codes:
 			return nil
 		}
 
-		generator.PrintCompletion(*project, outputDir)
+		elapsed := time.Since(startTime).Round(time.Second)
+		generator.PrintCompletionWithTime(*project, outputDir, elapsed)
+
+		if flagName == "" {
+			var runDev bool
+			err := huh.NewConfirm().
+				Title("바로 실행해 볼까요?").
+				Description("개발 서버를 시작하고 브라우저를 열어요").
+				Affirmative("네!").
+				Negative("나중에 할게요").
+				Value(&runDev).
+				Run()
+			if err == nil && runDev {
+				devCmd := exec.Command("npm", "run", "dev")
+				devCmd.Dir = outputDir
+				devCmd.Stdout = os.Stdout
+				devCmd.Stderr = os.Stderr
+				devCmd.Stdin = os.Stdin
+
+				go func() {
+					time.Sleep(3 * time.Second)
+					openBrowser("http://localhost:3000")
+				}()
+
+				return devCmd.Run()
+			}
+		}
+
 		return nil
 	},
 }

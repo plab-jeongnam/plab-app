@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/plab/plab-app/internal/model"
@@ -140,12 +141,20 @@ func printGitHubErrorGuide(projectName, stderr string) {
 }
 
 func PrintCompletion(project model.Project, dir string) {
+	PrintCompletionWithTime(project, dir, 0)
+}
+
+func PrintCompletionWithTime(project model.Project, dir string, elapsed time.Duration) {
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10"))
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	accentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("13"))
 
 	fmt.Println()
-	fmt.Println(titleStyle.Render("  완료!"))
+	if elapsed > 0 {
+		fmt.Println(titleStyle.Render(fmt.Sprintf("  완료! (%s)", elapsed)))
+	} else {
+		fmt.Println(titleStyle.Render("  완료!"))
+	}
 	fmt.Println()
 	fmt.Printf("  %s ./%s\n", dimStyle.Render("로컬:"), project.Name)
 	fmt.Println()
