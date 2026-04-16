@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/huh"
+	"github.com/plab/plab-app/internal/config"
 )
 
 func RunAPIKeySetup(projectDir string) error {
@@ -16,7 +17,7 @@ func RunAPIKeySetup(projectDir string) error {
 	fmt.Println(DimStyle.Render("  API 키가 있어야 플랩 데이터를 사용할 수 있어요."))
 	fmt.Println(DimStyle.Render("  아래 사이트에서 발급받을 수 있어요:"))
 	fmt.Println()
-	fmt.Println(AccentStyle.Render("  https://vibe.techin.pe.kr"))
+	fmt.Println(AccentStyle.Render("  " + config.PlabAPIURL))
 	fmt.Println(DimStyle.Render("  → 로그인 → 대시보드 → API 키 → 새 API 키 생성"))
 	fmt.Println()
 

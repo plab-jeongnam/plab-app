@@ -13,12 +13,11 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/plab/plab-app/internal/config"
 )
 
 const (
-	repoOwner = "plab-jeongnam"
-	repoName  = "plab-app"
-	timeout   = 2 * time.Second
+	timeout = 2 * time.Second
 )
 
 type githubRelease struct {
@@ -99,7 +98,7 @@ func isNewer(latest, current string) bool {
 }
 
 func fetchLatestRelease() (*githubRelease, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", repoOwner, repoName)
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", config.GitHubOwner, config.GitHubRepo)
 
 	client := &http.Client{Timeout: timeout}
 	resp, err := client.Get(url)

@@ -9,10 +9,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/plab/plab-app/internal/config"
 )
 
 const (
-	apiURL  = "https://vibe.techin.pe.kr/api/plab-app/events"
 	timeout = 3 * time.Second
 )
 
@@ -76,7 +77,7 @@ func sendEvent(data map[string]interface{}) {
 	}
 
 	client := &http.Client{Timeout: timeout}
-	req, err := http.NewRequest("POST", apiURL, bytes.NewReader(jsonBody))
+	req, err := http.NewRequest("POST", config.TrackingAPI, bytes.NewReader(jsonBody))
 	if err != nil {
 		return
 	}

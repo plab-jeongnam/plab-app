@@ -83,7 +83,6 @@ var statusCmd = &cobra.Command{
 				if c.Fix != "" {
 					fmt.Printf("    %s %s\n", dimStyle.Render("해결:"), dimStyle.Render(c.Fix))
 				}
-				allOK = true && false
 				allOK = false
 			}
 		}

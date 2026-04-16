@@ -89,15 +89,17 @@ plab-app create --name full --plab-data --researchers-only
 
 | 명령어 | 설명 |
 |--------|------|
+| `setup` | 개발 환경 원스텝 세팅 (도구 설치 + GitHub 로그인) |
 | `create` | 새 프로젝트 생성 (TUI 대화형 또는 CLI 플래그) |
-| `doctor` | 개발 환경 점검 (Git, Node.js, npm, gh, Vercel CLI, Claude Code) |
-| `deploy` | Vercel 배포 (로그인 체크 + 빌드 검증 + 배포) |
+| `doctor` | 개발 환경 점검 (`--fix`로 자동 설치) |
+| `deploy` | Vercel 배포 (환경변수 동기화 + 빌드 검증 + 배포) |
 | `dev` | 개발 서버 실행 + 브라우저 자동 오픈 |
 | `open` | GitHub / Vercel / localhost 브라우저 열기 |
 | `list` | 내 plab- 프로젝트 목록 (로컬 + GitHub) |
 | `status` | 현재 프로젝트 상태 확인 (빌드/Git/배포) |
 | `reset` | 프로젝트 복구 (node_modules 재설치 + 빌드 검증) |
 | `update-template` | 공통 설정을 최신 템플릿으로 업데이트 |
+| `upgrade` | plab-app 자체를 최신 버전으로 업데이트 |
 | `version` | 버전 확인 |
 
 ## 생성되는 프로젝트

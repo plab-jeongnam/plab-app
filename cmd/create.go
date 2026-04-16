@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/huh"
+	"github.com/plab/plab-app/internal/config"
 	"github.com/plab/plab-app/internal/doctor"
 	"github.com/plab/plab-app/internal/generator"
 	"github.com/plab/plab-app/internal/model"
@@ -243,6 +244,6 @@ func cliError(code, message, fix, command string) error {
 }
 
 func writeAPIKey(projectDir, apiKey string) error {
-	envContent := fmt.Sprintf("# 플랩 API 키\nPLAB_API_KEY=%s\nPLAB_API_URL=https://vibe.techin.pe.kr\n", apiKey)
+	envContent := fmt.Sprintf("# 플랩 API 키\nPLAB_API_KEY=%s\nPLAB_API_URL=%s\n", apiKey, config.PlabAPIURL)
 	return os.WriteFile(filepath.Join(projectDir, ".env.local"), []byte(envContent), 0644)
 }
