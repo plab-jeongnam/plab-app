@@ -171,11 +171,8 @@ func (g *Generator) replaceVars(name string) string {
 }
 
 func (g *Generator) shouldSkipDir(name string) bool {
-	if !g.Project.UsePlabData && name == "plab-demo" {
-		return true
-	}
 	if !g.Project.ResearchersOnly {
-		authDirs := []string{"[...nextauth]", "auth", "login", "protected"}
+		authDirs := []string{"[...nextauth]", "auth", "login"}
 		for _, d := range authDirs {
 			if name == d {
 				return true
@@ -187,15 +184,13 @@ func (g *Generator) shouldSkipDir(name string) bool {
 
 func (g *Generator) shouldSkipFile(path string) bool {
 	if !g.Project.UsePlabData {
-		plabFiles := []string{"plab.ts", "plab-demo", "/api/query/"}
-		for _, f := range plabFiles {
-			if strings.Contains(path, f) {
-				return true
-			}
+		// plab.ts는 유지할 수도 있지만 사용처가 없으면 제거
+		if strings.Contains(path, "plab.ts") {
+			return true
 		}
 	}
 	if !g.Project.ResearchersOnly {
-		authFiles := []string{"/auth/", "/login/", "/protected/", "session-provider", "sign-in-button", "auth-guard", "nav-bar", "middleware.ts"}
+		authFiles := []string{"/auth/", "/login/", "session-provider", "sign-in-button", "auth-guard", "nav-bar", "middleware.ts"}
 		for _, f := range authFiles {
 			if strings.Contains(path, f) {
 				return true

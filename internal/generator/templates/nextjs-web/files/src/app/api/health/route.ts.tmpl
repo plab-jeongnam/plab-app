@@ -1,0 +1,64 @@
+import { NextResponse } from "next/server"
+<% if .ResearchersOnly %>import { getServerSession } from "next-auth"
+
+import { authOptions } from "@/lib/auth/config"
+<% end %>
+interface HealthReport {
+  ok: boolean
+  timestamp: string
+  runtime: string
+  environment: string<% if .UsePlabData %>
+  plabApi: {
+    ok: boolean
+    status?: number
+    error?: string
+  }<% end %><% if .ResearchersOnly %>
+  session: {
+    authenticated: boolean
+    user?: {
+      name?: string | null
+      email?: string | null
+    }
+  }<% end %>
+}
+
+export async function GET() {
+  const report: HealthReport = {
+    ok: true,
+    timestamp: new Date().toISOString(),
+    runtime: process.env.NEXT_RUNTIME ?? "nodejs",
+    environment: process.env.NODE_ENV ?? "development",
+<% if .UsePlabData %>    plabApi: { ok: false },
+<% end %><% if .ResearchersOnly %>    session: { authenticated: false },
+<% end %>  }
+<% if .UsePlabData %>
+  // 플랩 API 서버에 간단한 ping
+  try {
+    const res = await fetch(
+      `${process.env.PLAB_API_URL ?? "https://vibe.techin.pe.kr"}/api/tables`,
+      {
+        method: "GET",
+        headers: { "X-API-Key": process.env.PLAB_API_KEY ?? "" },
+        signal: AbortSignal.timeout(5000),
+      },
+    )
+    report.plabApi = { ok: res.ok, status: res.status }
+    if (!res.ok) report.ok = false
+  } catch (err) {
+    report.plabApi = {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    }
+    report.ok = false
+  }
+<% end %><% if .ResearchersOnly %>
+  const session = await getServerSession(authOptions)
+  report.session = {
+    authenticated: !!session,
+    user: session?.user
+      ? { name: session.user.name, email: session.user.email }
+      : undefined,
+  }
+<% end %>
+  return NextResponse.json(report)
+}

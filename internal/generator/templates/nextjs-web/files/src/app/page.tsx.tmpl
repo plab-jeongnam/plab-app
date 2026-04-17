@@ -1,48 +1,138 @@
-import Link from "next/link"
+"use client"
+
+import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+
+interface HealthReport {
+  ok: boolean
+  timestamp: string
+  runtime: string
+  environment: string
+  plabApi?: { ok: boolean; status?: number; error?: string }
+  session?: {
+    authenticated: boolean
+    user?: { name?: string | null; email?: string | null }
+  }
+}
 
 export default function HomePage() {
+  const [report, setReport] = useState<HealthReport | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function checkHealth() {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/health")
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setReport(await res.json())
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setReport(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <main className="container mx-auto px-4 py-16">
-      <div className="flex flex-col items-center justify-center gap-10 text-center">
+      <div className="mx-auto flex max-w-3xl flex-col gap-10 text-center">
         <div className="space-y-4">
           <h1 className="text-4xl font-bold tracking-tight"><% .ProjectName %></h1>
-          <p className="max-w-xl text-lg text-muted-foreground">
+          <p className="text-lg text-muted-foreground">
             프로젝트가 준비됐어요.
           </p>
         </div>
 
-        <div className="max-w-2xl space-y-3">
+        <div className="space-y-3">
           <p className="text-2xl font-semibold">
             이제 만들고 싶은 걸 마음껏 만들어 보세요
           </p>
-          <p className="text-base text-muted-foreground leading-relaxed">
+          <p className="text-base leading-relaxed text-muted-foreground">
             떠오르는 아이디어가 있나요? AI에게 얘기해 주세요.
             페이지를 더 만들거나, 디자인을 바꾸거나, 새로운 기능을 추가하는 것
             전부 대신 해드릴 수 있어요.
           </p>
           <p className="text-sm text-muted-foreground">
-            예: <span className="italic">&quot;메인 화면에 경기 일정 리스트를 보여줘&quot;</span>,
-            <span className="italic">&quot;다크 모드 버튼 추가해줘&quot;</span>,
+            예: <span className="italic">&quot;경기 일정 리스트를 보여줘&quot;</span>,{" "}
+            <span className="italic">&quot;다크 모드 버튼 추가해줘&quot;</span>,{" "}
             <span className="italic">&quot;색상을 플랩 브랜드 컬러로 바꿔줘&quot;</span>
           </p>
         </div>
 
-        <div className="flex flex-wrap justify-center gap-3">
-          <Button asChild>
-            <Link href="/form">폼 예제 보기</Link>
-          </Button>
-<% if .UsePlabData %>
-          <Button variant="secondary" asChild>
-            <Link href="/plab-demo">플랩 데이터 데모</Link>
-          </Button>
-<% end %><% if .ResearchersOnly %>
-          <Button variant="outline" asChild>
-            <Link href="/protected">리서처 전용 페이지</Link>
-          </Button>
-<% end %>
-        </div>
+        <Card className="text-left">
+          <CardHeader>
+            <CardTitle>서버 상태 확인</CardTitle>
+            <CardDescription>
+              버튼을 눌러 프론트엔드 ↔ 서버 ↔ 외부 API 연결이 모두 정상인지 확인해 보세요.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button onClick={checkHealth} disabled={loading}>
+              {loading ? "확인 중..." : "지금 확인하기"}
+            </Button>
+
+            {error && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                통신에 실패했어요: {error}
+              </div>
+            )}
+
+            {report && (
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <span className="text-muted-foreground">전체 상태:</span>{" "}
+                  <span className={report.ok ? "font-semibold text-green-600" : "font-semibold text-destructive"}>
+                    {report.ok ? "✓ 모두 정상" : "✗ 일부 문제 있음"}
+                  </span>
+                </li>
+                <li>
+                  <span className="text-muted-foreground">서버 응답 시각:</span>{" "}
+                  <code className="text-xs">{report.timestamp}</code>
+                </li>
+                <li>
+                  <span className="text-muted-foreground">실행 환경:</span>{" "}
+                  <code className="text-xs">{report.environment}</code> /{" "}
+                  <code className="text-xs">{report.runtime}</code>
+                </li>
+<% if .UsePlabData %>                {report.plabApi && (
+                  <li>
+                    <span className="text-muted-foreground">플랩 API 연결:</span>{" "}
+                    {report.plabApi.ok ? (
+                      <span className="font-semibold text-green-600">✓ 연결됨 (HTTP {report.plabApi.status})</span>
+                    ) : (
+                      <span className="font-semibold text-destructive">
+                        ✗ 실패{report.plabApi.status ? ` (HTTP ${report.plabApi.status})` : ""}
+                        {report.plabApi.error ? ` — ${report.plabApi.error}` : ""}
+                      </span>
+                    )}
+                  </li>
+                )}
+<% end %><% if .ResearchersOnly %>                {report.session && (
+                  <li>
+                    <span className="text-muted-foreground">로그인 상태:</span>{" "}
+                    {report.session.authenticated ? (
+                      <span className="font-semibold text-green-600">
+                        ✓ {report.session.user?.name ?? report.session.user?.email ?? "로그인됨"}
+                      </span>
+                    ) : (
+                      <span className="font-semibold text-destructive">✗ 로그아웃 상태</span>
+                    )}
+                  </li>
+                )}
+<% end %>              </ul>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </main>
   )
