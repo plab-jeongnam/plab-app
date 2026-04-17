@@ -282,9 +282,52 @@ func cliError(code, message, fix, command string) error {
 	return fmt.Errorf("%s", message)
 }
 
+// writeAPIKey sets PLAB_API_KEY in .env.local without clobbering other
+// env sections (Google OAuth / NextAuth) that the generator already injected
+// for --researchers-only. If .env.local is missing (e.g. --plab-data=false
+// path) we create it fresh with just the plab keys.
 func writeAPIKey(projectDir, apiKey string) error {
-	envContent := fmt.Sprintf("# 플랩 API 키\nPLAB_API_KEY=%s\nPLAB_API_URL=%s\n", apiKey, config.PlabAPIURL)
-	return os.WriteFile(filepath.Join(projectDir, ".env.local"), []byte(envContent), 0644)
+	envPath := filepath.Join(projectDir, ".env.local")
+	plabBlock := fmt.Sprintf("PLAB_API_KEY=%s\nPLAB_API_URL=%s", apiKey, config.PlabAPIURL)
+
+	existing, err := os.ReadFile(envPath)
+	if err != nil {
+		// No pre-existing file — write a fresh .env.local with only plab keys.
+		fresh := fmt.Sprintf("# 플랩 API 키\n%s\n", plabBlock)
+		return os.WriteFile(envPath, []byte(fresh), 0644)
+	}
+
+	// Template shape (when --plab-data was set):
+	//   PLAB_API_KEY=
+	//   PLAB_API_URL=https://vibe.techin.pe.kr
+	// We rewrite these two lines in place, leaving any researchers-only
+	// GOOGLE_* / NEXTAUTH_* block below them untouched.
+	lines := strings.Split(string(existing), "\n")
+	replaced := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "PLAB_API_KEY=") {
+			lines[i] = "PLAB_API_KEY=" + apiKey
+			// If the next line is PLAB_API_URL, normalise it; otherwise insert.
+			if i+1 < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[i+1]), "PLAB_API_URL=") {
+				lines[i+1] = "PLAB_API_URL=" + config.PlabAPIURL
+			} else {
+				// Insert the URL line right after the key.
+				lines = append(lines[:i+1], append([]string{"PLAB_API_URL=" + config.PlabAPIURL}, lines[i+1:]...)...)
+			}
+			replaced = true
+			break
+		}
+	}
+
+	if !replaced {
+		// PLAB_API_KEY line not found (file came from a non-plab-data path).
+		// Prepend the plab block to preserve other sections below.
+		prefix := "# 플랩 API 키\n" + plabBlock + "\n\n"
+		return os.WriteFile(envPath, []byte(prefix+string(existing)), 0644)
+	}
+
+	return os.WriteFile(envPath, []byte(strings.Join(lines, "\n")), 0644)
 }
 
 // missingEnvVars reports env vars whose values the LLM still needs to collect
