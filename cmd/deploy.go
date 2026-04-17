@@ -64,7 +64,7 @@ var deployCmd = &cobra.Command{
 			deployType = "프로덕션"
 		}
 
-		if !flagJSON {
+		if !AutoConfirm() {
 			var confirm bool
 			err := huh.NewConfirm().
 				Title(fmt.Sprintf("%s 배포를 시작할까요?", deployType)).
@@ -173,10 +173,27 @@ var deployCmd = &cobra.Command{
 				"success": true,
 				"url":     deployURL,
 				"type":    deployType,
+				"next_steps": []map[string]string{
+					{"label": "브라우저에서 확인", "command": "plab-app open"},
+					{"label": "상태 확인", "command": "plab-app status --json"},
+				},
 			}
 			if hasResearchersOnly(cwd) {
+				redirectURI := gcp.RedirectURIForURL(deployURL)
 				oauthErr := gcp.AddRedirectURI(deployURL)
-				result["oauth_redirect_uri"] = gcp.RedirectURIForURL(deployURL)
+				oauth := map[string]interface{}{
+					"required":     true,
+					"redirect_uri": redirectURI,
+					"registered":   oauthErr == nil,
+				}
+				if oauthErr != nil {
+					oauth["requires_user_action"] = true
+					oauth["console_url"] = "https://console.cloud.google.com/apis/credentials"
+					oauth["user_action_reason"] = "Google Cloud Console에서 OAuth 2.0 클라이언트의 '승인된 리디렉션 URI'에 redirect_uri 값을 추가해 주세요."
+				}
+				result["oauth"] = oauth
+				// Backward-compatible flat fields (do not remove).
+				result["oauth_redirect_uri"] = redirectURI
 				result["oauth_redirect_registered"] = oauthErr == nil
 			}
 			PrintJSON(result)
@@ -254,7 +271,15 @@ func checkVercelLogin() error {
 
 	if err != nil || strings.TrimSpace(out.String()) == "" {
 		if flagJSON {
-			PrintCLIError("vercel_not_logged_in", "Vercel에 로그인되어 있지 않아요.", "vercel login 으로 로그인해 주세요.", "vercel login")
+			PrintJSON(map[string]interface{}{
+				"success":              false,
+				"error":                "Vercel에 로그인되어 있지 않아요.",
+				"code":                 "vercel_not_logged_in",
+				"fix":                  "vercel login 으로 로그인해 주세요. (브라우저 상호작용 필요)",
+				"command":              "vercel login",
+				"requires_user_action": true,
+				"user_action_reason":   "Vercel 로그인은 브라우저에서 직접 수행해야 해요. 유저에게 터미널에서 'vercel login' 실행을 안내해 주세요.",
+			})
 			os.Exit(1)
 		}
 		fmt.Println()

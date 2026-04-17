@@ -29,44 +29,72 @@ plab-app version
 
 ## LLM을 위한 설치 가이드
 
-LLM이 사용자 환경에 plab-app을 설치할 때 아래 순서를 따르세요.
+LLM은 비개발자 유저의 자연어 요청(예: "이 레포로 프로젝트 만들어줘")을 받아 이 CLI를 `--json --yes` 모드로 자동 실행합니다. 유저에게는 아래 "최소 질문"만 물어보세요.
+
+### 최소 질문 (유저에게 물어볼 것)
+
+1. **프로젝트 이름이 뭐예요?** → `--name`
+2. **플랩 데이터를 쓸 건가요?** (예/아니오) → `--plab-data`
+   - 예인 경우에만: **플랩 API 키를 알려주세요** → `--api-key`
+3. **리서처만 사용하나요?** (예/아니오) → `--researchers-only`
+
+### 표준 플로우 (무인 실행)
 
 ```
 1. OS 감지
    - uname -m (macOS/Linux) 또는 $env:PROCESSOR_ARCHITECTURE (Windows)
 
-2. 바이너리 다운로드
-   - macOS arm64: plab-app-darwin-arm64
-   - macOS amd64: plab-app-darwin-amd64
-   - Windows amd64: plab-app-windows-amd64.exe
-   - Windows arm64: plab-app-windows-arm64.exe
+2. 바이너리 다운로드 + PATH 배치
    - Base URL: https://github.com/plab-jeongnam/plab-app/releases/latest/download/
+   - macOS arm64/amd64: plab-app-darwin-{arch}      → /usr/local/bin/plab-app (chmod +x)
+   - Windows amd64/arm64: plab-app-windows-{arch}.exe → $env:LOCALAPPDATA\Microsoft\WindowsApps\plab-app.exe
 
-3. PATH에 배치
-   - macOS: /usr/local/bin/plab-app (chmod +x 필수)
-   - Windows: $env:LOCALAPPDATA\Microsoft\WindowsApps\plab-app.exe
+3. 환경 세팅
+   - plab-app setup --json
+   - 도구 자동 설치 + 상태 JSON 반환
+   - gh_auth: false 이면 requires_user_action: true → 유저에게 'gh auth login --web' 안내
 
-4. 환경 세팅 (원스텝)
-   - plab-app setup
-   - 필수 도구 자동 설치 + GitHub 로그인까지 안내
-
-5. 프로젝트 생성 (비대화형 CLI 모드)
+4. 프로젝트 생성
    - plab-app create --name <name> [--plab-data] [--researchers-only] [--api-key KEY] --json
-   - --json 플래그로 결과를 파싱 가능한 JSON으로 받기
+   - 응답의 next_steps[] 를 그대로 실행하면 다음 단계 진행 가능
 
-6. 에러 처리
-   - 모든 --json 에러 응답에 code, fix, command 필드 포함
-   - code별 자동 복구 가능 (예: dir_exists → rm -rf 후 재시도)
+5. 배포 (선택)
+   - cd <project> && plab-app deploy --prod --json --yes
+   - oauth.requires_user_action: true 이면 유저에게 console_url 안내
 ```
+
+### 모든 커맨드 공통 플래그
+
+- `--json` : 구조화된 JSON 응답 (`--yes` 자동 포함)
+- `--yes`  : 모든 확인 질문을 자동 승인 (JSON 없이도 사용 가능)
+
+### 에러 코드 → LLM 대응
+
+| code | 의미 | LLM 대응 |
+|------|------|---------|
+| `brew_required` | macOS에 Homebrew 없음 | `command` 필드의 설치 명령을 **유저에게 복붙 안내** (curl\|bash는 무인 실행 X) |
+| `required_tools_missing` | 필수 도구 부족 | `plab-app setup --json --yes` 로 재시도 |
+| `apikey_required` | `--plab-data` 인데 API 키 없음 | **유저에게 플랩 API 키를 물어보고** 재시도 |
+| `dir_exists` | 프로젝트 폴더 중복 | 다른 이름 제안 또는 `rm -rf` 후 재시도 (유저 동의 필수) |
+| `generate_failed` | 템플릿 생성 실패 | `stderr_head` 확인 후 보고 |
+| `build_failed` | `npm run build` 실패 | `cd <project> && npm run build` 로그 확인 |
+| `vercel_not_found` | Vercel CLI 없음 | `npm install -g vercel` 자동 실행 또는 안내 |
+| `vercel_not_logged_in` | Vercel 미로그인 | `requires_user_action: true` — 유저에게 `vercel login` 안내 |
+| `deploy_failed` | 배포 실패 | `stderr` 분석 후 보고 |
+| `not_project` | plab 프로젝트 폴더 아님 | `cd <project>` 한 뒤 재시도 |
+
+### `requires_user_action: true` 필드
+
+브라우저·계정 상호작용이 필수인 단계 (GitHub 로그인, Vercel 로그인, Google OAuth 등록)에서 이 필드가 `true`로 붙습니다. LLM은 무인 실행을 중단하고, `user_action_reason` 메시지를 유저에게 그대로 전달하세요.
 
 **macOS / Linux (LLM 복붙용):**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/plab-jeongnam/plab-app/main/install.sh | bash && plab-app setup
+curl -fsSL https://raw.githubusercontent.com/plab-jeongnam/plab-app/main/install.sh | bash && plab-app setup --json
 ```
 
 **Windows (LLM 복붙용):**
 ```powershell
-irm https://raw.githubusercontent.com/plab-jeongnam/plab-app/main/install.ps1 | iex; plab-app setup
+irm https://raw.githubusercontent.com/plab-jeongnam/plab-app/main/install.ps1 | iex; plab-app setup --json
 ```
 
 ## 시작하기

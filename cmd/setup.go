@@ -29,9 +29,16 @@ var setupCmd = &cobra.Command{
   4. 완료 후 plab-app create 안내
 
 예시:
-  plab-app setup`,
+  plab-app setup                               # 대화형
+  plab-app setup --yes                         # 모든 확인 자동 승인
+  plab-app setup --json                        # JSON 결과 (LLM/자동화용, --yes 포함)`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		plat := platform.Detect()
+		auto := AutoConfirm()
+
+		if flagJSON {
+			return runSetupJSON(plat)
+		}
 
 		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
 		okMark := lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("✓")
@@ -69,18 +76,7 @@ var setupCmd = &cobra.Command{
 		fmt.Println()
 
 		// Step 2: 필수 도구 확인 + 설치
-		type toolCheck struct {
-			name       string
-			binary     string
-			installCmd string
-			required   bool
-		}
-
-		tools := []toolCheck{
-			{"Git", "git", plat.InstallCommand("git"), true},
-			{"Node.js", "node", plat.InstallCommand("node"), true},
-			{"GitHub CLI", "gh", plat.InstallCommand("gh"), true},
-		}
+		tools := setupTools(plat)
 
 		fmt.Println(titleStyle.Render("  2. 필수 도구 확인"))
 		fmt.Println()
@@ -97,20 +93,22 @@ var setupCmd = &cobra.Command{
 		fmt.Println()
 
 		if len(needsInstall) > 0 {
-			var doInstall bool
-			err := huh.NewConfirm().
-				Title(fmt.Sprintf("%d개 도구를 설치할까요?", len(needsInstall))).
-				Description("자동으로 설치할 수 있어요.").
-				Affirmative("네, 설치해 주세요").
-				Negative("아니오, 직접 할게요").
-				Value(&doInstall).
-				Run()
+			doInstall := auto
+			if !auto {
+				err := huh.NewConfirm().
+					Title(fmt.Sprintf("%d개 도구를 설치할까요?", len(needsInstall))).
+					Description("자동으로 설치할 수 있어요.").
+					Affirmative("네, 설치해 주세요").
+					Negative("아니오, 직접 할게요").
+					Value(&doInstall).
+					Run()
 
-			if err != nil {
-				if tui.IsUserAborted(err) {
-					return nil
+				if err != nil {
+					if tui.IsUserAborted(err) {
+						return nil
+					}
+					return err
 				}
-				return err
 			}
 
 			if doInstall {
@@ -168,16 +166,21 @@ var setupCmd = &cobra.Command{
 				fmt.Println(dimStyle.Render("  브라우저가 열리면 로그인해 주세요."))
 				fmt.Println()
 
-				var doLogin bool
-				err := huh.NewConfirm().
-					Title("GitHub 로그인을 시작할까요?").
-					Description("GitHub 계정이 없다면 https://github.com/signup 에서 먼저 가입해 주세요.").
-					Affirmative("네, 로그인할게요").
-					Negative("나중에 할게요").
-					Value(&doLogin).
-					Run()
+				doLogin := auto
+				if !auto {
+					err := huh.NewConfirm().
+						Title("GitHub 로그인을 시작할까요?").
+						Description("GitHub 계정이 없다면 https://github.com/signup 에서 먼저 가입해 주세요.").
+						Affirmative("네, 로그인할게요").
+						Negative("나중에 할게요").
+						Value(&doLogin).
+						Run()
+					if err != nil {
+						doLogin = false
+					}
+				}
 
-				if err == nil && doLogin {
+				if doLogin {
 					loginCmd := exec.Command("gh", "auth", "login", "--web")
 					loginCmd.Stdin = os.Stdin
 					loginCmd.Stdout = os.Stdout
@@ -213,6 +216,100 @@ var setupCmd = &cobra.Command{
 
 		return nil
 	},
+}
+
+type toolCheck struct {
+	name       string
+	binary     string
+	installCmd string
+	required   bool
+}
+
+func setupTools(plat platform.Platform) []toolCheck {
+	return []toolCheck{
+		{"Git", "git", plat.InstallCommand("git"), true},
+		{"Node.js", "node", plat.InstallCommand("node"), true},
+		{"GitHub CLI", "gh", plat.InstallCommand("gh"), true},
+	}
+}
+
+// runSetupJSON performs setup in non-interactive mode and emits structured JSON
+// for LLMs/automation. Brew missing is treated as a blocking error because
+// piping curl|bash under automation is unsafe — we return the install command
+// and let the orchestrator surface it to the user.
+func runSetupJSON(plat platform.Platform) error {
+	result := map[string]interface{}{
+		"success":  false,
+		"platform": plat.OS,
+	}
+
+	if plat.OS == "darwin" {
+		if _, err := exec.LookPath("brew"); err != nil {
+			PrintCLIError(
+				"brew_required",
+				"Homebrew가 설치되어 있지 않아요.",
+				"아래 명령을 터미널에 복사해 실행한 뒤 plab-app setup 을 다시 실행해 주세요.",
+				`/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`,
+			)
+			os.Exit(1)
+		}
+	}
+
+	tools := setupTools(plat)
+	installed := []string{}
+	failed := []map[string]string{}
+	missing := []string{}
+
+	for _, t := range tools {
+		if _, err := exec.LookPath(t.binary); err == nil {
+			continue
+		}
+		installCmd := buildInstallCommand(plat.OS, t.installCmd)
+		c := exec.Command(installCmd[0], installCmd[1:]...)
+		if err := c.Run(); err != nil {
+			failed = append(failed, map[string]string{
+				"name":        t.name,
+				"binary":      t.binary,
+				"install_cmd": t.installCmd,
+				"error":       err.Error(),
+			})
+			missing = append(missing, t.name)
+		} else {
+			installed = append(installed, t.name)
+		}
+	}
+
+	report := doctor.Run()
+	ghAuthOK := false
+	for _, r := range report.Results {
+		if r.Name == "GitHub 인증" && r.OK {
+			ghAuthOK = true
+		}
+	}
+
+	result["installed"] = installed
+	result["missing"] = missing
+	if len(failed) > 0 {
+		result["install_failed"] = failed
+	}
+	result["gh_auth"] = ghAuthOK
+
+	if !ghAuthOK {
+		result["gh_auth_command"] = "gh auth login --web"
+		result["requires_user_action"] = true
+		result["user_action_reason"] = "GitHub 로그인은 브라우저 상호작용이 필요해요. 유저에게 'gh auth login --web' 실행을 안내해 주세요."
+	}
+
+	if report.RequiredPassed() && ghAuthOK {
+		result["success"] = true
+		result["next_command"] = "plab-app create --json"
+	}
+
+	PrintJSON(result)
+	if !result["success"].(bool) {
+		os.Exit(1)
+	}
+	return nil
 }
 
 func buildInstallCommand(goos, installCmd string) []string {

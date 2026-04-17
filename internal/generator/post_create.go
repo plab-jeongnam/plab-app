@@ -20,11 +20,35 @@ var (
 
 type step struct {
 	label   string
+	key     string
 	fn      func() (string, error) // (stderr output, error)
 	onError func(stderr string)
 }
 
-func PostCreate(project model.Project, dir string) error {
+// StepResult is a machine-readable outcome for a single PostCreate step.
+type StepResult struct {
+	Key        string `json:"key"`
+	Label      string `json:"label"`
+	OK         bool   `json:"ok"`
+	StderrHead string `json:"stderr_head,omitempty"`
+}
+
+// PostCreateResult aggregates all step results so LLM callers can decide
+// per-step recovery strategy.
+type PostCreateResult struct {
+	Steps  []StepResult
+	Failed bool
+}
+
+// Err returns a non-nil error when any step failed (backward-compatible shape).
+func (r PostCreateResult) Err() error {
+	if r.Failed {
+		return fmt.Errorf("일부 작업이 실패했어요")
+	}
+	return nil
+}
+
+func PostCreate(project model.Project, dir string) PostCreateResult {
 	fmt.Println()
 	fmt.Println(progressStyle.Render("  프로젝트를 만들고 있어요..."))
 	fmt.Println()
@@ -32,6 +56,7 @@ func PostCreate(project model.Project, dir string) error {
 	steps := []step{
 		{
 			label: "Git 초기화",
+			key:   "git_init",
 			fn: func() (string, error) {
 				if _, err := runCapture(dir, "git", "init"); err != nil {
 					return "", err
@@ -44,12 +69,14 @@ func PostCreate(project model.Project, dir string) error {
 		},
 		{
 			label: "필요한 패키지 설치",
+			key:   "npm_install",
 			fn: func() (string, error) {
 				return runCapture(dir, "npm", "install")
 			},
 		},
 		{
 			label: "프로젝트 빌드 검증",
+			key:   "npm_build",
 			fn: func() (string, error) {
 				return runCapture(dir, "npm", "run", "build")
 			},
@@ -60,6 +87,7 @@ func PostCreate(project model.Project, dir string) error {
 		},
 		{
 			label: "GitHub 저장소 생성",
+			key:   "gh_repo_create",
 			fn: func() (string, error) {
 				return runCapture(dir, "gh", "repo", "create", project.Name, "--private", "--source=.", "--push")
 			},
@@ -69,24 +97,40 @@ func PostCreate(project model.Project, dir string) error {
 		},
 	}
 
-	hasError := false
+	result := PostCreateResult{Steps: make([]StepResult, 0, len(steps))}
 	for _, s := range steps {
 		sp := tui.NewSpinner(s.label)
 		sp.Start()
 		stderr, err := s.fn()
 		sp.Stop(err == nil)
+		result.Steps = append(result.Steps, StepResult{
+			Key:        s.key,
+			Label:      s.label,
+			OK:         err == nil,
+			StderrHead: stderrHead(stderr),
+		})
 		if err != nil {
-			hasError = true
+			result.Failed = true
 			if s.onError != nil {
 				s.onError(stderr)
 			}
 		}
 	}
+	return result
+}
 
-	if hasError {
-		return fmt.Errorf("일부 작업이 실패했어요")
+// stderrHead returns a trimmed, length-capped preview of stderr so it's safe
+// to include in JSON responses for LLM consumers.
+func stderrHead(s string) string {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return ""
 	}
-	return nil
+	const max = 500
+	if len(trimmed) > max {
+		return trimmed[:max]
+	}
+	return trimmed
 }
 
 func printGitHubErrorGuide(projectName, stderr string) {

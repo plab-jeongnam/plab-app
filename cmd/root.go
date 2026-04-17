@@ -11,7 +11,14 @@ import (
 var (
 	appVersion = "dev"
 	flagJSON   bool
+	flagYes    bool
 )
+
+// AutoConfirm returns true when the user or LLM wants to skip interactive
+// confirmations (either explicit --yes, or --json which implies automation).
+func AutoConfirm() bool {
+	return flagYes || flagJSON
+}
 
 func SetVersion(v string) {
 	appVersion = v
@@ -51,6 +58,7 @@ func Execute() error {
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&flagJSON, "json", false, "출력을 JSON 형식으로 반환 (LLM/자동화용)")
+	rootCmd.PersistentFlags().BoolVar(&flagYes, "yes", false, "모든 확인 질문을 자동 승인 (LLM/자동화용, --json 이면 자동 활성)")
 	rootCmd.AddCommand(createCmd)
 	rootCmd.AddCommand(doctorCmd)
 	rootCmd.AddCommand(versionCmd)

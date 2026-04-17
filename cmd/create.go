@@ -104,6 +104,18 @@ Exit Codes:
 				ResearchersOnly: flagResearchersOnly,
 			}
 
+			// LLM/automation path must not silently create a non-functional project.
+			// If --plab-data is requested without --api-key, fail fast with a
+			// structured error so the orchestrator can ask the user for the key.
+			if project.UsePlabData && flagAPIKey == "" && AutoConfirm() {
+				return cliError(
+					"apikey_required",
+					"플랩 API 키가 필요해요.",
+					"--api-key 플래그로 플랩 API 키를 함께 전달해 주세요.",
+					fmt.Sprintf("plab-app create --name %s --plab-data --api-key KEY --json", flagName),
+				)
+			}
+
 			if !flagJSON {
 				fmt.Println()
 				fmt.Printf("  프로젝트: %s\n", tui.AccentStyle.Render(project.Name))
@@ -168,20 +180,47 @@ Exit Codes:
 		tracking.TrackProjectCreated(project.Name, repoURL, project.UsePlabData, project.ResearchersOnly)
 
 		if flagJSON {
-			result := map[string]interface{}{
-				"success": postResult == nil,
-				"project": project.Name,
-				"path":    outputDir,
-				"plab_data": project.UsePlabData,
+			steps := make([]map[string]interface{}, 0, len(postResult.Steps))
+			for _, s := range postResult.Steps {
+				entry := map[string]interface{}{
+					"key":   s.Key,
+					"label": s.Label,
+					"ok":    s.OK,
+				}
+				if s.StderrHead != "" {
+					entry["stderr_head"] = s.StderrHead
+				}
+				steps = append(steps, entry)
 			}
-			if postResult != nil {
-				result["warning"] = postResult.Error()
+
+			nextSteps := []map[string]string{
+				{"label": "개발 서버 실행", "command": fmt.Sprintf("cd %s && plab-app dev", project.Name)},
+				{"label": "프로덕션 배포", "command": fmt.Sprintf("cd %s && plab-app deploy --prod --json --yes", project.Name)},
+			}
+
+			result := map[string]interface{}{
+				"success":          !postResult.Failed,
+				"project":          project.Name,
+				"path":             outputDir,
+				"plab_data":        project.UsePlabData,
+				"researchers_only": project.ResearchersOnly,
+				"steps":            steps,
+				"next_steps":       nextSteps,
+			}
+			if repoURL != "" {
+				result["repo_url"] = repoURL
+			}
+			if missing := missingEnvVars(project, flagAPIKey); len(missing) > 0 {
+				result["missing_env"] = missing
+			}
+			if postResult.Failed {
+				result["warning"] = postResult.Err().Error()
 			}
 			PrintJSON(result)
 			return nil
 		}
 
-		if postResult != nil {
+		if postResult.Failed {
 			fmt.Println()
 			return nil
 		}
@@ -246,4 +285,17 @@ func cliError(code, message, fix, command string) error {
 func writeAPIKey(projectDir, apiKey string) error {
 	envContent := fmt.Sprintf("# 플랩 API 키\nPLAB_API_KEY=%s\nPLAB_API_URL=%s\n", apiKey, config.PlabAPIURL)
 	return os.WriteFile(filepath.Join(projectDir, ".env.local"), []byte(envContent), 0644)
+}
+
+// missingEnvVars reports env vars whose values the LLM still needs to collect
+// from the user before the generated project can actually run.
+func missingEnvVars(project *model.Project, apiKey string) []string {
+	var missing []string
+	if project.UsePlabData && apiKey == "" {
+		missing = append(missing, "PLAB_API_KEY")
+	}
+	if project.ResearchersOnly {
+		missing = append(missing, "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "NEXTAUTH_SECRET")
+	}
+	return missing
 }
